@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#635bff"><link rel="manifest" href="manifest.json"><title>Chaiti Planner</title>
+<style>
+:root{--bg:#f5f6fa;--card:#fff;--text:#171923;--muted:#727684;--accent:#635bff;--line:#e6e7ee;--good:#18a56b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+header{background:var(--card);padding:18px 16px 10px;position:sticky;top:0;z-index:10;border-bottom:1px solid var(--line)}
+h1{margin:0;font-size:24px}.sub{color:var(--muted);font-size:13px;margin-top:3px}
+nav{display:flex;overflow:auto;gap:7px;padding:10px 0 3px}.nav{border:0;background:#eeeef7;border-radius:18px;padding:8px 13px;white-space:nowrap}.nav.on{background:var(--accent);color:#fff}
+main{max-width:760px;margin:auto;padding:12px 13px 90px}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px;margin:9px 0;box-shadow:0 4px 18px #00000008}
+h2{font-size:18px;margin:3px 0 12px}.muted{color:var(--muted)}.small{font-size:12px}.row{display:flex;align-items:center;gap:10px}.row+.row{margin-top:12px}
+.check{width:22px;height:22px;accent-color:var(--accent)}.grow{flex:1}.title{font-weight:700}.meta{font-size:12px;color:var(--muted);margin-top:2px}
+.badge{font-size:11px;background:#efeeff;color:#5149d7;padding:5px 8px;border-radius:10px}.danger{background:#fff0f0;color:#c43b3b}
+.progress{height:9px;background:#ebecf2;border-radius:10px;overflow:hidden;margin-top:8px}.bar{height:100%;background:var(--accent);transition:.2s}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.stat{padding:12px;border:1px solid var(--line);border-radius:14px}.stat b{font-size:22px;display:block}
+.section{font-weight:800;margin:16px 3px 7px}.empty{text-align:center;padding:35px 10px;color:var(--muted)}
+button,input,select,textarea{font:inherit}input,select,textarea{width:100%;padding:11px;border:1px solid var(--line);border-radius:11px;background:#fff;margin:5px 0 10px}
+.primary{width:100%;border:0;background:var(--accent);color:#fff;padding:12px;border-radius:11px;font-weight:700}.secondary{width:100%;border:1px solid var(--line);background:#fff;padding:11px;border-radius:11px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}.fab{position:fixed;right:18px;bottom:18px;width:57px;height:57px;border:0;border-radius:50%;background:var(--accent);color:#fff;font-size:28px;box-shadow:0 8px 25px #0004;z-index:20}
+.taskdone{text-decoration:line-through;color:var(--muted)}.daybox{display:flex;gap:5px;flex-wrap:wrap}.daybox label{font-size:11px;border:1px solid var(--line);border-radius:9px;padding:7px}.daybox input{width:auto;margin:0}
+.timeline{position:relative}.time{font-size:12px;color:var(--muted);width:48px}.line{height:1px;background:var(--line);flex:1}.remove{border:0;background:#fff1f1;color:#c33;border-radius:8px;padding:6px}
+.toast{position:fixed;bottom:85px;left:50%;transform:translateX(-50%);background:#20222b;color:#fff;padding:10px 15px;border-radius:12px;display:none;z-index:30}
+</style></head>
+<body>
+<header><h1>🌱 Chaiti Planner</h1><div class="sub" id="date"></div><nav id="nav"></nav></header>
+<main id="main"></main><button class="fab" onclick="addForm()">+</button><div id="toast" class="toast"></div>
+<script>
+const KEY='chaiti-planner-complete-v2';
+const starter=[
+['JEE Physics','JEE','06:00',120,'0,1,2,3,4,5,6'],
+['BSc Physics','BSc','10:00',90,'0,1,2,3,4,5,6'],
+['JEE Maths / Chemistry','JEE','17:00',120,'0,1,2,3,4,5,6'],
+['Exercise','Exercise','19:30',45,'0,1,2,3,4,5,6'],
+['Coding','Coding','20:30',45,'1,3,5'],
+['3D practice','3D','20:30',45,'2,4,6'],
+['Drawing / Video editing','Creative','20:30',45,'0'],
+['Daily review + tomorrow plan','Routine','21:30',15,'0,1,2,3,4,5,6']
+].map((x,i)=>({id:i+1,title:x[0],cat:x[1],time:x[2],mins:x[3],days:x[4].split(',').map(Number)}));
+let db=JSON.parse(localStorage.getItem(KEY)||'null')||{tasks:starter,done:{},notes:'',topics:[],settings:{name:'',goal:'Consistent BSc + JEE + skills'}};
+function save(){localStorage.setItem(KEY,JSON.stringify(db))}
+function dk(d=new Date()){return d.toISOString().slice(0,10)}
+function pretty(d=new Date()){return new Intl.DateTimeFormat(undefined,{weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(d)}
+document.getElementById('date').textContent=pretty();
+let page='Today';
+const pages=['Today','Tasks','Topics','Progress','Settings'];
+function nav(){document.getElementById('nav').innerHTML=pages.map(p=>`<button class="nav ${page==p?'on':''}" onclick="page='${p}';render()">${p}</button>`).join('')}
+function today(){let d=new Date().getDay();return db.tasks.filter(t=>t.days.includes(d)).sort((a,b)=>a.time.localeCompare(b.time))}
+function isDone(id,k=dk()){return !!(db.done[k]||{})[id]}
+function toggle(id){let k=dk();db.done[k]??={};db.done[k][id]=!db.done[k][id];save();render()}
+function progress(arr=today()){let c=arr.filter(t=>isDone(t.id)).length;return [c,arr.length,arr.length?Math.round(c/arr.length*100):0]}
+function render(){nav();if(page==='Today')todayPage();if(page==='Tasks')tasksPage();if(page==='Topics')topicsPage();if(page==='Progress')progressPage();if(page==='Settings')settingsPage()}
+function todayPage(){
+let arr=today(), [c,n,p]=progress(arr);let h=`<div class="card"><h2>Good morning${db.settings.name?' '+db.settings.name:''} 👋</h2><div class="muted">${db.settings.goal}</div><div style="margin-top:13px"><b>${c}/${n} tasks completed · ${p}%</b><div class="progress"><div class="bar" style="width:${p}%"></div></div></div></div>`;
+let cats={};arr.forEach(t=>(cats[t.cat]??=[]).push(t));
+if(!arr.length)h+=`<div class="card empty">No recurring tasks for today.<br>Add one with +</div>`;
+for(let [cat,ts] of Object.entries(cats)){h+=`<div class="section">${cat}</div><div class="card">`;ts.forEach(t=>h+=taskRow(t));h+=`</div>`}
+h+=`<div class="card"><h2>📝 Today's note</h2><textarea id="todaynote" rows="4" placeholder="What did I learn? What should I improve?">${db.notesByDay?.[dk()]||''}</textarea><button class="primary" onclick="saveTodayNote()">Save note</button></div>`;
+document.getElementById('main').innerHTML=h}
+function taskRow(t){let d=isDone(t.id);return `<div class="row"><input class="check" type="checkbox" ${d?'checked':''} onchange="toggle(${t.id})"><div class="grow"><div class="title ${d?'taskdone':''}">${t.title}</div><div class="meta">${t.time} · ${t.mins} min · repeats weekly</div></div><span class="badge">${t.cat}</span></div>`}
+function tasksPage(){let h=`<div class="card"><h2>🔄 Your recurring system</h2><div class="muted small">Set these once. Chaiti automatically shows the correct tasks on each day.</div></div>`;
+if(!db.tasks.length)h+=`<div class="empty">No tasks yet.</div>`;
+db.tasks.sort((a,b)=>a.time.localeCompare(b.time)).forEach(t=>h+=`<div class="card"><div class="row"><div class="grow"><div class="title">${t.title}</div><div class="meta">${t.cat} · ${t.time} · ${t.mins} min · ${t.days.map(x=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][x]).join(', ')}</div></div><button class="remove" onclick="delTask(${t.id})">Delete</button></div></div>`);
+document.getElementById('main').innerHTML=h}
+function addForm(){document.getElementById('main').innerHTML=`<div class="card"><h2>➕ Add repeating task</h2><label>Task name</label><input id="title" placeholder="e.g. Ray Optics revision"><label>Category</label><select id="cat"><option>BSc</option><option>JEE</option><option>Coding</option><option>3D</option><option>Creative</option><option>Exercise</option><option>Routine</option></select><div class="two"><div><label>Start</label><input id="time" type="time" value="20:00"></div><div><label>Minutes</label><input id="mins" type="number" value="45" min="5"></div></div><label>Repeat on</label><div class="daybox">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((x,i)=>`<label><input type="checkbox" value="${i}" ${i>0?'checked':''}> ${x}</label>`).join('')}</div><br><button class="primary" onclick="addTask()">Create recurring task</button><br><br><button class="secondary" onclick="page='Tasks';render()">Cancel</button></div>`}
+function addTask(){let title=document.getElementById('title').value.trim(),days=[...document.querySelectorAll('.daybox input:checked')].map(x=>+x.value);if(!title||!days.length){alert('Enter a task and choose at least one day.');return}db.tasks.push({id:Date.now(),title,cat:document.getElementById('cat').value,time:document.getElementById('time').value,mins:+document.getElementById('mins').value,days});save();page='Tasks';render();toast('Recurring task created ✓')}
+function delTask(id){if(confirm('Delete this recurring task?')){db.tasks=db.tasks.filter(t=>t.id!==id);save();render()}}
+function topicsPage(){let h=`<div class="card"><h2>📚 Topic tracker</h2><div class="muted small">Keep the routine recurring, but change the actual topic here as you progress.</div><input id="topic" placeholder="Add topic, e.g. Torque and angular momentum"><select id="topiccat"><option>JEE Physics</option><option>JEE Maths</option><option>JEE Chemistry</option><option>BSc Physics</option><option>BSc Maths</option><option>Coding</option><option>3D</option><option>Drawing</option><option>Video editing</option></select><button class="primary" onclick="addTopic()">Add topic</button></div>`;
+if(!db.topics.length)h+=`<div class="empty">No topics yet.</div>`;
+db.topics.forEach((t,i)=>h+=`<div class="card"><div class="row"><input class="check" type="checkbox" ${t.done?'checked':''} onchange="topicDone(${i})"><div class="grow"><div class="title ${t.done?'taskdone':''}">${t.text}</div><div class="meta">${t.cat}</div></div><button class="remove" onclick="delTopic(${i})">×</button></div></div>`);
+document.getElementById('main').innerHTML=h}
+function addTopic(){let x=document.getElementById('topic').value.trim();if(!x)return;db.topics.unshift({text:x,cat:document.getElementById('topiccat').value,done:false});save();render();toast('Topic added ✓')}
+function topicDone(i){db.topics[i].done=!db.topics[i].done;save();render()}
+function delTopic(i){db.topics.splice(i,1);save();render()}
+function progressPage(){
+let arr=today(),[c,n,p]=progress(arr), totalDone=Object.values(db.done).reduce((s,x)=>s+Object.values(x).filter(Boolean).length,0), topicsDone=db.topics.filter(x=>x.done).length;
+let h=`<div class="grid"><div class="stat"><span class="muted small">Today</span><b>${p}%</b></div><div class="stat"><span class="muted small">Tasks completed</span><b>${totalDone}</b></div><div class="stat"><span class="muted small">Topics finished</span><b>${topicsDone}</b></div><div class="stat"><span class="muted small">Recurring tasks</span><b>${db.tasks.length}</b></div></div>`;
+h+=`<div class="card"><h2>📈 Today</h2><div>${c} of ${n} scheduled tasks complete.</div><div class="progress"><div class="bar" style="width:${p}%"></div></div></div>`;
+let dates=Object.keys(db.done).sort().slice(-7);h+=`<div class="card"><h2>Last 7 tracked days</h2>`;
+dates.forEach(k=>{let x=Object.values(db.done[k]).filter(Boolean).length;h+=`<div style="margin:10px 0"><div class="row"><span class="grow">${k}</span><b>${x}</b></div><div class="progress"><div class="bar" style="width:${Math.min(x/Math.max(db.tasks.length,1)*100,100)}%"></div></div></div>`});h+=`</div>`;
+document.getElementById('main').innerHTML=h}
+function settingsPage(){document.getElementById('main').innerHTML=`<div class="card"><h2>⚙️ Personal setup</h2><label>Your name</label><input id="name" value="${db.settings.name||''}" placeholder="Your name"><label>Main goal</label><input id="goal" value="${db.settings.goal||''}"><button class="primary" onclick="saveSettings()">Save</button></div><div class="card"><h2>💾 Your data</h2><p class="small muted">Everything is stored locally in this browser/app. Export it regularly so you have a backup.</p><button class="primary" onclick="exportData()">Export backup</button><br><br><button class="secondary" onclick="document.getElementById('imp').click()">Import backup</button><input id="imp" type="file" accept=".json" style="display:none" onchange="importData(event)"><br><br><button class="secondary" onclick="resetData()">Reset to starter routine</button></div>`}
+function saveSettings(){db.settings.name=document.getElementById('name').value.trim();db.settings.goal=document.getElementById('goal').value.trim();save();render();toast('Saved ✓')}
+function saveTodayNote(){db.notesByDay??={};db.notesByDay[dk()]=document.getElementById('todaynote').value;save();toast('Note saved ✓')}
+function exportData(){let b=new Blob([JSON.stringify(db,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='chaiti-planner-backup.json';a.click();toast('Backup exported')}
+function importData(e){let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{db=JSON.parse(r.result);save();render();toast('Backup imported ✓')}catch{alert('Invalid backup')}};r.readAsText(f)}
+function resetData(){if(confirm('Reset your planner to the starter routine?')){db={tasks:starter,done:{},notes:'',topics:[],settings:{name:'',goal:'Consistent BSc + JEE + skills'}};save();render()}}
+function toast(s){let x=document.getElementById('toast');x.textContent=s;x.style.display='block';setTimeout(()=>x.style.display='none',1800)}
+render();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
+</script></body></html>
